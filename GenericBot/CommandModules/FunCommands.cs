@@ -355,17 +355,6 @@ namespace GenericBot.CommandModules
 
             FunCommands.Add(clap);
 
-            Command lewd = new Command("lewd");
-            reportBug.Description = "Shout at a user for being lewd!";
-            reportBug.Usage = "lewd";
-            reportBug.SendTyping = true;
-            reportBug.ToExecute += async (client, msg, parameters) =>
-            {
-                await msg.ReplyAsync($"Hey! No being Lewd! Consider this a warning y'all ");
-            };
-
-            botCommands.Add(lewd);
-
             return FunCommands;
         }
     }
