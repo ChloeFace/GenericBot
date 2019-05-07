@@ -1,10 +1,12 @@
-﻿using LiteDB;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using MongoDB.Driver;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace GenericBot.Entities
 {
@@ -70,51 +72,18 @@ namespace GenericBot.Entities
         public GuildMessageStats(ulong guildId)
         {
             this.ID = guildId;
-            try
-            {
-                if (GenericBot.LoadedGuildMessageStats.ContainsKey(this.ID))
-                {
-                    this.Users = GenericBot.LoadedGuildMessageStats[this.ID].Users;
-                }
-                else
-                {
-                    var col = GenericBot.GlobalDatabase.GetCollection<GuildMessageStats>("messageStats");
-                    GuildMessageStats tempdb;
-                    col.EnsureIndex(c => c.ID, true);
-                    if (col.Exists(c => c.ID.Equals(guildId)))
-                    {
-                        tempdb = col.FindOne(c => c.ID.Equals(guildId));
-                    }
-                    else
-                    {
-                        tempdb = new GuildMessageStats() { ID = guildId, Users = new List<StatsUser>() };
-                    }
-                    this.Users = tempdb.Users;
-                }
-            }
-            catch (Exception ex)
-            {
-                GenericBot.Logger.LogErrorMessage($"Load Stats for {guildId} Failed: {ex.Message}\n{ex.StackTrace}");
-            }
+            var guildDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var collection = guildDb.GetCollection<StatsUser>("guildMessageStats");
+
+            this.Users = collection.AsQueryable().ToList();
         }
 
         public void Save()
         {
-            try
-            {
-                if (!GenericBot.LoadedGuildMessageStats.TryAdd(this.ID, this))
-                    GenericBot.LoadedGuildMessageStats[this.ID] = this;
-
-                var col = GenericBot.GlobalDatabase.GetCollection<GuildMessageStats>("messageStats");
-                col.EnsureIndex(c => c.ID, true);
-                col.Upsert(this);
-            }
-            catch (Exception ex)
-            {
-                GenericBot.Logger.LogErrorMessage($"GuildID: {this.ID}\n{ex.Message}\n{ex.StackTrace}");
-                this.Save();
-            }
-
+            var guildDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var collection = guildDb.GetCollection<StatsUser>("guildMessageStats");
+            collection.DeleteMany(new BsonDocument());
+            collection.InsertMany(this.Users);
         }
 
 

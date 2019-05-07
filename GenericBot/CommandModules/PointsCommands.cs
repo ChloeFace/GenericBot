@@ -19,7 +19,7 @@ namespace GenericBot.CommandModules
                 if (!GenericBot.GuildConfigs[msg.GetGuild().Id].PointsEnabled)
                     return;
 
-                var user = new DBGuild(msg.GetGuild().Id).GetUser(msg.Author.Id);
+                var user = new DBGuild(msg.GetGuild().Id).GetOrCreateUser(msg.Author.Id);
                 await msg.ReplyAsync($"{msg.Author.Mention}, you have `{Math.Floor(user.PointsCount)}` {GenericBot.GuildConfigs[msg.GetGuild().Id].PointsName}s!");
             };
             pointCommands.Add(points);
@@ -57,8 +57,8 @@ namespace GenericBot.CommandModules
                     return;
 
                 var dbGuild = new DBGuild(msg.GetGuild().Id);
-                var user = dbGuild.GetUser(msg.Author.Id);
-                if (user.PointsCount < 1)
+                var givingUser = dbGuild.GetOrCreateUser(msg.Author.Id);
+                if (givingUser.PointsCount < 1)
                 {
                     await msg.ReplyAsync($"You don't have any {config.PointsName} to give!");
                 }
@@ -66,7 +66,7 @@ namespace GenericBot.CommandModules
                 {
                     if (msg.MentionedUsers.Any())
                     {
-                        if (msg.MentionedUsers.Count > user.PointsCount)
+                        if (msg.MentionedUsers.Count > givingUser.PointsCount)
                         {
                             await msg.ReplyAsync($"You don't have that many {GenericBot.GuildConfigs[msg.GetGuild().Id].PointsName}s to give!");
                         }
@@ -74,13 +74,11 @@ namespace GenericBot.CommandModules
                         {
                             foreach (var u in msg.MentionedUsers)
                             {
-
                                 if (u.Id == msg.Author.Id) continue;
 
-                                user.PointsCount--;
-                                dbGuild.GetUser(u.Id).PointsCount++;
+                                dbGuild.AddOrUpdateUser(givingUser.AddPoints((decimal)-1.0));
+                                dbGuild.AddOrUpdateUser(dbGuild.GetOrCreateUser(u.Id).AddPoints((decimal)1.0));
                             }
-                            dbGuild.Save();
                             await msg.ReplyAsync($"{msg.MentionedUsers.Select(us => us.Mention).ToList().SumAnd()} received a {GenericBot.GuildConfigs[msg.GetGuild().Id].PointsName} from {msg.Author.Mention}!");
                         }
                     }
@@ -97,9 +95,9 @@ namespace GenericBot.CommandModules
             setPoints.ToExecute += async (client, msg, parameters) =>
             {
                 var dbGuild = new DBGuild(msg.GetGuild().Id);
-                var user = dbGuild.GetUser(ulong.Parse(parameters[0]));
+                var user = dbGuild.GetOrCreateUser(ulong.Parse(parameters[0]));
                 user.PointsCount = decimal.Parse(parameters[1]);
-                dbGuild.Save();
+                dbGuild.AddOrUpdateUser(user);
                 await msg.ReplyAsync($"`{parameters[0]}` now has {(user.PointsCount)} points");
             };
             pointCommands.Add(setPoints);

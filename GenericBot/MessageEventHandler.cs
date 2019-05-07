@@ -53,16 +53,10 @@ namespace GenericBot
             try
             {
                 var guildDb = new DBGuild(message.GetGuild().Id);
-                if (guildDb.Users.Any(u => u.ID.Equals(message.Author.Id))) // if already exists
-                {
-                    guildDb.Users.Find(u => u.ID.Equals(message.Author.Id)).AddUsername(message.Author.Username);
-                    guildDb.Users.Find(u => u.ID.Equals(message.Author.Id)).AddNickname(message.Author as SocketGuildUser);
-                }
-                else
-                {
-                    guildDb.Users.Add(new DBUser(message.Author as SocketGuildUser));
-                }
-                guildDb.Save();
+                var dbUser = guildDb.GetOrCreateUser(message.Author.Id);
+                dbUser.AddNickname(message.GetGuild().GetUser(message.Author.Id));
+                dbUser.AddUsername(message.Author.Username);
+                guildDb.AddOrUpdateUser(dbUser);
             }
             catch(Exception ex){ await GenericBot.Logger.LogErrorMessage(ex.Message + "\n" + ex.StackTrace); }
             if (!edited)
@@ -135,17 +129,18 @@ namespace GenericBot
                 {
                     DBGuild db = new DBGuild(message.GetGuild().Id);
                     if (db.Users == null) return;
+                    var dbUser = db.GetOrCreateUser(message.Author.Id);
                     if (!edited)
                     {
-                        db.GetUser(message.Author.Id).PointsCount += (decimal)(.01);
-                        if (message.Author.Id == 189378507724292096 && GenericBot.annoy2B && (db.GetUser(189378507724292096).PointsCount*100) % 25 == 0)
+                        db.AddOrUpdateUser(dbUser.AddPoints((decimal)0.01));
+                        if (message.Author.Id == 189378507724292096 && GenericBot.annoy2B && (db.GetOrCreateUser(189378507724292096).PointsCount*100) % 25 == 0)
                         {
                             message.ReplyAsync($"2b sleep");
                         }
-                        if (GenericBot.GuildConfigs[message.GetGuild().Id].Levels.Any(kvp => kvp.Key <= db.GetUser(message.Author.Id).PointsCount))
+                        if (GenericBot.GuildConfigs[message.GetGuild().Id].Levels.Any(kvp => kvp.Key <= dbUser.PointsCount))
                         {
                             foreach (var level in GenericBot.GuildConfigs[message.GetGuild().Id].Levels
-                            .Where(kvp => kvp.Key <= db.GetUser(message.Author.Id).PointsCount)
+                            .Where(kvp => kvp.Key <= dbUser.PointsCount)
                             .Where(kvp => !(message.Author as SocketGuildUser).Roles.Any(r => r.Id.Equals(kvp.Value))))
                             {
                                 (message.Author as SocketGuildUser).AddRoleAsync(message.GetGuild().GetRole(level.Value));
@@ -155,25 +150,25 @@ namespace GenericBot
                     var thanksRegex = new Regex(@"(\b)((thanks?)|(thx)|(ty))(\b)", RegexOptions.IgnoreCase);
                     if (thanksRegex.IsMatch(message.Content) && GenericBot.GuildConfigs[message.GetGuild().Id].PointsEnabled && message.MentionedUsers.Any())
                     {
-                        if (new DBGuild(message.GetGuild().Id).GetUser(message.Author.Id).LastThanks.AddMinutes(1) < DateTimeOffset.UtcNow)
+                        if (dbUser.LastThanks.AddMinutes(1) < DateTimeOffset.UtcNow)
                         {
                             List<IUser> givenUsers = new List<IUser>();
                             foreach (var user in message.MentionedUsers)
                             {
                                 if (user.Id == message.Author.Id) continue;
 
-                                db.GetUser(user.Id).PointsCount++;
+                                db.AddOrUpdateUser(db.GetOrCreateUser(user.Id).AddPoints((decimal)1));
                                 givenUsers.Add(user);
                             }
                             if (givenUsers.Any())
                             {
                                 message.ReplyAsync($"{givenUsers.Select(us => $"**{(us as SocketGuildUser).GetDisplayName()}**").ToList().SumAnd()} received a {GenericBot.GuildConfigs[message.GetGuild().Id].PointsName} of thanks from **{(message.Author as SocketGuildUser).GetDisplayName()}**");
-                                db.GetUser(message.Author.Id).LastThanks = DateTimeOffset.UtcNow;
+                                dbUser.LastThanks = DateTimeOffset.UtcNow;
+                                db.AddOrUpdateUser(dbUser);
                             }
                             else message.ReplyAsync("You can't give yourself a point!");
                         }
                     }
-                    db.Save();
                 }
             }
             catch (Exception ex)

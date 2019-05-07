@@ -244,7 +244,15 @@ namespace GenericBot.CommandModules
                     floofstring = wc.DownloadString(baseURL + "list.php");
                 var floofarray = floofstring.Split("<br>").ToList();
                 floofstring = floofarray.GetRandomItem();
-                await msg.ReplyAsync(baseURL + floofstring);
+                if(floofstring.Contains("https"))
+                {
+                    await msg.ReplyAsync(floofstring);
+                }
+                else
+                {
+                    await msg.ReplyAsync(baseURL + floofstring);
+                }
+                
             };
             FunCommands.Add(floof);
 
@@ -261,7 +269,6 @@ namespace GenericBot.CommandModules
                     return;
                 }
                 var q = dbGuild.AddQuote(parameters.reJoin());
-                dbGuild.Save();
                 await msg.ReplyAsync($"Added {q.ToString()}");
             };
             FunCommands.Add(addQuote);
@@ -295,7 +302,6 @@ namespace GenericBot.CommandModules
                 {
                     await msg.ReplyAsync("You must pass in a number");
                 }
-                dbGuild.Save();
             };
             FunCommands.Add(removeQuote);
 

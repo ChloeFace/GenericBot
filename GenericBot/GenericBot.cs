@@ -11,6 +11,7 @@ using Discord;
 using Discord.WebSocket;
 using GenericBot.Entities;
 using Microsoft.Extensions.DependencyInjection;
+using MongoDB.Driver;
 using Newtonsoft.Json;
 using Timer = System.Timers.Timer;
 
@@ -26,17 +27,13 @@ namespace GenericBot
         public static string BuildNumber = "Unknown";
         public static Animols Animols = new Animols();
 
-        public static Timer StatusPollingTimer = new Timer();
-
-        public static ConcurrentDictionary<ulong, DBGuild> LoadedGuildDbs = new ConcurrentDictionary<ulong, DBGuild>();
         public static ConcurrentDictionary<ulong, GuildMessageStats> LoadedGuildMessageStats = new ConcurrentDictionary<ulong, GuildMessageStats>();
-        public static LiteDB.LiteDatabase GlobalDatabase;
+        public static MongoClient mongoClient;
 
         public static Timer Updater = new Timer();
 
         public static Dictionary<ulong, List<IMessage>> MessageDeleteQueue = new Dictionary<ulong, List<IMessage>>();
         public static Timer MessageDeleteTimer = new Timer();
-        public static bool Test = true;
         public static Stopwatch QuickWatch = new Stopwatch();
         public static ParsedCommand LastCommand;
 
@@ -54,7 +51,7 @@ namespace GenericBot
                 BuildNumber = File.ReadAllText("version.txt").Trim();
             }
             GlobalConfiguration = new GlobalConfiguration().Load();
-            GlobalDatabase = new LiteDB.LiteDatabase(@"Filename=files/guildDatabase.db; Mode=Shared; Async=true; Password=" + GlobalConfiguration.DatabasePassword);
+            mongoClient = new MongoClient(GlobalConfiguration.DbConnectionString);
             GuildConfigs = new Dictionary<ulong, GuildConfig>();
 
             #region Timers
@@ -62,14 +59,6 @@ namespace GenericBot
             Updater.AutoReset = true;
             Updater.Interval = 5 * 1000;
             Updater.Elapsed += CheckMuteRemoval;
-
-            if (!string.IsNullOrEmpty(GlobalConfiguration.StatusAuthKey))
-            {
-                StatusPollingTimer.AutoReset = true;
-                StatusPollingTimer.Interval = 1 * 1000;
-                StatusPollingTimer.Elapsed += StatusPollingTimerOnElapsed;
-                StatusPollingTimer.Start();
-            }
 
             #endregion Timers
 
@@ -150,8 +139,6 @@ namespace GenericBot
 
         private async Task OnGuildConnected(SocketGuild guild)
         {
-            bool f = LoadedGuildDbs.TryAdd(guild.Id, new DBGuild(guild.Id));
-            await Logger.LogGenericMessage($"Loaded DB for {guild.Name} ({guild.Id}): {f}");
             if (!File.Exists($"files/guildConfigs/{guild.Id}.json"))
             {
                 new GuildConfig(guild.Id).Save();
@@ -160,21 +147,6 @@ namespace GenericBot
             {
                 GuildConfigs.Add(guild.Id, JsonConvert.DeserializeObject<GuildConfig>(
                     File.ReadAllText($"files/guildConfigs/{guild.Id}.json")));
-            }
-        }
-
-        private static void StatusPollingTimerOnElapsed(object sender, ElapsedEventArgs e)
-        {
-            if (GenericBot.DiscordClient.GetShard(0).ConnectionState == ConnectionState.Disconnecting || GenericBot.DiscordClient.GetShard(0).ConnectionState == ConnectionState.Disconnected)
-            {
-                if (StatusPollingTimer.Interval == 15 * 1000)
-                {
-                    Logger.LogErrorMessage("Disconnecting timed out, forcing exit");
-                    Environment.Exit(1);
-                }
-                else
-                    StatusPollingTimer.Interval = 15 * 1000;
-                return;
             }
         }
 
@@ -218,7 +190,7 @@ namespace GenericBot
                                     .WithIconUrl(user.GetAvatarUrl());
                             })
                             .AddField(new EmbedFieldBuilder().WithName("All Warnings").WithValue(
-                                new DBGuild(ban.GuildId).GetUser(ban.Id).Warnings.SumAnd()));
+                                new DBGuild(ban.GuildId).GetOrCreateUser(ban.Id).Warnings.SumAnd()));
                         await ((SocketTextChannel)DiscordClient.GetChannel(gc.UserLogChannelId))
                             .SendMessageAsync("", embed: builder.Build());
                     }

@@ -102,7 +102,7 @@ namespace GenericBot.CommandModules
                                     .WithIconUrl(user.GetAvatarUrl());
                             })
                             .AddField(new EmbedFieldBuilder().WithName("All Warnings").WithValue(
-                                new DBGuild(msg.GetGuild().Id).GetUser(user.Id).Warnings.SumAnd()));
+                                new DBGuild(msg.GetGuild().Id).GetOrCreateUser(user.Id).Warnings.SumAnd()));
 
                         await ((SocketTextChannel)GenericBot.DiscordClient.GetChannel(gc.UserLogChannelId))
                             .SendMessageAsync("", embed: builder.Build());
@@ -226,10 +226,10 @@ namespace GenericBot.CommandModules
                         string t = tmsg;
 
                         guildconfig.Save();
-                        guilddb.GetUser(user.Id)
+                        var bannedUser = guilddb.GetOrCreateUser(user.Id)
                             .AddWarning(
                                 $"Banned {t} for `{reason}` (By `{msg.Author}` At `{DateTime.UtcNow.ToString(@"yyyy-MM-dd HH:mm tt")} GMT`)");
-                        guilddb.Save();
+                        guilddb.AddOrUpdateUser(bannedUser);
 
                         await msg.Channel.SendMessageAsync("", embed: builder.Build());
                         if (guildconfig.UserLogChannelId != 0)
@@ -357,10 +357,10 @@ namespace GenericBot.CommandModules
                         string t = tmsg;
 
                         guildconfig.Save();
-                        guilddb.GetUser(user.Id)
+                        var bannedUser = guilddb.GetOrCreateUser(user.Id)
                             .AddWarning(
                                 $"Banned {t} for `{reason}` (By `{msg.Author}` At `{DateTime.UtcNow.ToString(@"yyyy-MM-dd HH:mm tt")} GMT`)");
-                        guilddb.Save();
+                        guilddb.AddOrUpdateUser(bannedUser);
 
                         await msg.Channel.SendMessageAsync("", embed: builder.Build());
                         if (guildconfig.UserLogChannelId != 0)
@@ -450,10 +450,10 @@ namespace GenericBot.CommandModules
                 var guildconfig = GenericBot.GuildConfigs[msg.GetGuild().Id];
                 guildconfig.ProbablyMutedUsers.Remove(user.Id);
                 guildconfig.Save();
-                guilddb.GetUser(user.Id)
+                var kickedUser = guilddb.GetOrCreateUser(user.Id)
                     .AddWarning(
                         $"Kicked for `{reason}` (By `{msg.Author}` At `{DateTime.UtcNow.ToString(@"yyyy-MM-dd HH:mm tt")} GMT`)");
-                guilddb.Save();
+                guilddb.AddOrUpdateUser(kickedUser);
 
                 await msg.Channel.SendMessageAsync("", embed: builder.Build());
                 if (guildconfig.UserLogChannelId != 0)

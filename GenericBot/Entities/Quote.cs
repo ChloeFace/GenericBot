@@ -1,9 +1,12 @@
-﻿namespace GenericBot.Entities
+﻿using MongoDB.Bson.Serialization.Attributes;
+
+namespace GenericBot.Entities
 {
     public class Quote
     {
-        public string Content { get; set; }
+        [BsonId]
         public int Id { get; set; }
+        public string Content { get; set; }
         public bool Active { get; set; }
 
         public Quote()

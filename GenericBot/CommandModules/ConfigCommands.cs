@@ -596,7 +596,7 @@ namespace GenericBot.CommandModules
                                 int addedUsers = 0;
                                 foreach (var user in msg.GetGuild().Users)
                                 {
-                                    if (db.GetUser(user.Id).PointsCount >= pointValue)
+                                    if (db.GetOrCreateUser(user.Id).PointsCount >= pointValue)
                                     {
                                         try
                                         {
