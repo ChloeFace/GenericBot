@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using Discord.WebSocket;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace GenericBot.Entities
 {
     public class DBUser
     {
+        [BsonId]
         public ulong ID { get; set; }
         public List<string> Nicknames { get; set; }
         public List<string> Usernames { get; set; }
@@ -34,44 +36,54 @@ namespace GenericBot.Entities
             CreatedAt = user.CreatedAt;
         }
 
-        public void AddUsername(string username)
+        public DBUser AddUsername(string username)
         {
             if (Usernames == null) Usernames = new List<string>();
             if (!Usernames.Contains(username))
             {
                 Usernames.Add(username);
             }
+            return this;
         }
-        public void AddNickname(string username)
+        public DBUser AddNickname(string username)
         {
             if (Nicknames == null) Nicknames = new List<string>();
             if (!Nicknames.Contains(username))
             {
                 Nicknames.Add(username);
             }
+            return this;
         }
 
-        public void AddNickname(SocketGuildUser user)
+        public DBUser AddNickname(SocketGuildUser user)
         {
-            if (user == null) return;
+            if (user == null) return this;
             if (Nicknames == null) Nicknames = new List<string>();
             if (user.Nickname != null && !string.IsNullOrEmpty(user.Nickname) && !Nicknames.Contains(user.Nickname))
             {
                 Nicknames.Add(user.Nickname);
             }
+            return this;
         }
 
-        public void AddWarning(string warning)
+        public DBUser AddWarning(string warning)
         {
             if (Warnings == null) Warnings = new List<string>();
             Warnings.Add(warning);
+            return this;
         }
 
-        public bool RemoveWarning(bool allWarnings = false)
+        public DBUser AddPoints(decimal points)
+        {
+            PointsCount += points;
+            return this;
+        }
+
+        public DBUser RemoveWarning(bool allWarnings = false)
         {
             if (Warnings.Empty())
             {
-                return false;
+                throw new DivideByZeroException("User has no warnings");
             }
             if (!allWarnings)
             {
@@ -81,7 +93,7 @@ namespace GenericBot.Entities
             {
                 Warnings.RemoveRange(0, Warnings.Count);
             }
-            return true;
+            return this;
         }
     }
 }

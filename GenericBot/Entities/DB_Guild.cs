@@ -3,14 +3,32 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using MongoDB.Driver;
+using MongoDB.Bson;
 
 namespace GenericBot.Entities
 {
     public class DBGuild
     {
         public ulong ID { get; set; }
-        public List<DBUser> Users { get; set; }
-        public List<Quote> Quotes { get; set; }
+        public List<DBUser> Users
+        {
+            get
+            {
+                var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+                var users = gDb.GetCollection<DBUser>("users");
+                return users.AsQueryable().ToList();
+            }
+        }
+        public List<Quote> Quotes
+        {
+            get
+            {
+                var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+                var quotes = gDb.GetCollection<Quote>("users");
+                return quotes.AsQueryable().ToList();
+            }
+        }
 
         public DBGuild()
         {
@@ -20,92 +38,69 @@ namespace GenericBot.Entities
         public DBGuild(ulong guildId)
         {
             this.ID = guildId;
-            try
-            {
-                if (GenericBot.LoadedGuildDbs.ContainsKey(this.ID))
-                {
-                    this.Users = GenericBot.LoadedGuildDbs[this.ID].Users;
-                    this.Quotes = GenericBot.LoadedGuildDbs[this.ID].Quotes;
-                }
-                else
-                {
-                    var col = GenericBot.GlobalDatabase.GetCollection<DBGuild>("userDatabase");
-                    DBGuild tempdb;
-                    col.EnsureIndex(c => c.ID, true);
-                    if (col.Exists(c => c.ID.Equals(guildId)))
-                    {
-                        tempdb = col.FindOne(c => c.ID.Equals(guildId));
-                    }
-                    else
-                    {
-                        tempdb = new DBGuild() { ID = guildId, Users = new List<DBUser>() };
-                    }
-                    this.Users = tempdb.Users;
-                    this.Quotes = tempdb.Quotes;
-                }
-            }
-            catch (Exception ex)
-            {
-                GenericBot.Logger.LogErrorMessage($"Load DB for {guildId} Failed: {ex.Message}\n{ex.StackTrace}");
-            }
         }
 
-        public async void Save()
+        public void AddOrUpdateUser(DBUser user)
         {
-            try
+
+            var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var users = gDb.GetCollection<DBUser>("users");
+            if(users.CountDocuments(Builders<DBUser>.Filter.Eq("ID" ,user.ID)) == 1)
             {
-                GenericBot.LoadedGuildDbs[this.ID] = this;
-                var col = GenericBot.GlobalDatabase.GetCollection<DBGuild>("userDatabase");
-                col.EnsureIndex(c => c.ID, true);
-                col.Upsert(this);
+                users.DeleteOne(Builders<DBUser>.Filter.Eq("ID", user.ID));
             }
-            catch(Exception ex)
-            {
-                await GenericBot.Logger.LogErrorMessage($"GuildID: {this.ID}\n{ex.Message}\n{ex.StackTrace}");
-                this.Save();
-            }
+            users.InsertOne(user);
         }
 
-        public DBUser GetUser(ulong id)
+        public DBUser GetOrCreateUser(ulong userId)
         {
-            if (Users.HasElement(u => u.ID.Equals(id), out var res))
+            var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var users = gDb.GetCollection<DBUser>("users");
+            if (users.CountDocuments(u => u.ID == userId) > 0)
             {
-                return res;
+                return users.Find(Builders<DBUser>.Filter.Eq("ID", userId)).ToList().First();
             }
             else
             {
-                Users.Add(new DBUser() { ID = id });
-                return GetUser(id);
-            };
+                if(GenericBot.DiscordClient.GetGuild(this.ID).GetUser(userId) != null)
+                    users.InsertOne(new DBUser(GenericBot.DiscordClient.GetGuild(this.ID).GetUser(userId)));
+                else
+                    users.InsertOne(new DBUser() { ID = userId });
+
+                return GetOrCreateUser(userId);
+            }
         }
 
         public Quote AddQuote(string content)
         {
-            if (Quotes == null || Quotes.Count == 0)
-            {
-                Quotes = new List<Quote>();
-            }
+            var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var Quotes = gDb.GetCollection<Quote>("quotes");
+
             var q = new Quote
             {
                 Content = content,
-                Id = Quotes.Count == 0 ? 1 : Quotes.Last().Id + 1,
+                Id = Quotes.CountDocuments(new BsonDocument()) == 0 ? 1 : (int)Quotes.CountDocuments(new BsonDocument()) + 1,
                 Active = true
             };
-            Quotes.Add(q);
+            Quotes.InsertOne(q);
 
-            this.Save();
-
-            return Quotes.Last();
+            return q;
         }
 
         public Quote GetQuote(string identifer)
         {
+            var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var dbQuotes = gDb.GetCollection<Quote>("quotes");
+
             try
             {
-                if (Quotes == null || Quotes.Count == 0)
+                if (!gDb.ListCollectionNames(new ListCollectionNamesOptions { Filter = new BsonDocument("name", "quotes")}).Any()
+                    || dbQuotes.CountDocuments(new BsonDocument("Active", false)) == 0)
                 {
                     return new Quote { Content = "This server has no quotes", Id = -1 };
                 }
+
+                var Quotes = dbQuotes.Find(new BsonDocument()).ToList();
 
                 if (string.IsNullOrEmpty(identifer))
                 {
@@ -157,14 +152,18 @@ namespace GenericBot.Entities
 
         public bool RemoveQuote(int id)
         {
-            if (id > Quotes.Last().Id)
+            var gDb = GenericBot.mongoClient.GetDatabase($"{this.ID}");
+            var dbQuotes = gDb.GetCollection<Quote>("quotes");
+
+            try
+            {
+                dbQuotes.UpdateOne(new BsonDocument("ID", id), Builders<Quote>.Update.Set("Active", false));
+                return true;
+            }
+            catch
             {
                 return false;
             }
-
-            var quote = Quotes.First(q => q.Id == id);
-            quote.Active = false;
-            return true;
         }
     }
 }

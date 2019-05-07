@@ -16,18 +16,12 @@ namespace GenericBot
             if (beforeUser.Username != afterUser.Username || beforeUser.Nickname != afterUser.Nickname)
             {
                 var guildDb = new DBGuild(afterUser.Guild.Id);
-                if (guildDb.Users.Any(u => u.ID.Equals(afterUser.Id))) // if already exists
-                {
-                    guildDb.Users.Find(u => u.ID.Equals(afterUser.Id)).AddUsername(beforeUser.Username);
-                    guildDb.Users.Find(u => u.ID.Equals(afterUser.Id)).AddNickname(beforeUser);
-                    guildDb.Users.Find(u => u.ID.Equals(afterUser.Id)).AddUsername(afterUser.Username);
-                    guildDb.Users.Find(u => u.ID.Equals(afterUser.Id)).AddNickname(afterUser);
-                }
-                else
-                {
-                    guildDb.Users.Add(new DBUser(afterUser));
-                }
-                guildDb.Save();
+                var user = guildDb.GetOrCreateUser(afterUser.Id);
+                user.AddUsername(beforeUser.Username);
+                user.AddNickname(beforeUser);
+                user.AddUsername(afterUser.Username);
+                user.AddNickname(afterUser);
+                guildDb.AddOrUpdateUser(user);
             }
             return Task.CompletedTask;
         }
@@ -40,14 +34,11 @@ namespace GenericBot
             bool alreadyJoined = false;
             if (guildDb.Users.Any(u => u.ID.Equals(user.Id))) // if already exists
             {
-                guildDb.Users.Find(u => u.ID.Equals(user.Id)).AddUsername(user.Username);
                 alreadyJoined = true;
             }
-            else
-            {
-                guildDb.Users.Add(new DBUser(user));
-            }
-            guildDb.Save();
+            var dbUser = guildDb.GetOrCreateUser(user.Id);
+            dbUser.AddUsername(user.Username);
+            guildDb.AddOrUpdateUser(dbUser);
             
             #endregion Databasae
 
@@ -160,10 +151,10 @@ namespace GenericBot
 
                         var guilddb = new DBGuild(user.Guild.Id);
                         var guildconfig = GenericBot.GuildConfigs[user.Guild.Id];
-                        guilddb.GetUser(user.Id)
+                        var kickedUser = guilddb.GetOrCreateUser(user.Id)
                             .AddWarning(
                                 $"Kicked for `Username Contains Discord Spam Invite` (By `{GenericBot.DiscordClient.CurrentUser}` At `{DateTime.UtcNow.ToString(@"yyyy-MM-dd HH:mm tt")} GMT`)");
-                        guilddb.Save();
+                        guilddb.AddOrUpdateUser(kickedUser);
 
                         if (guildconfig.UserLogChannelId != 0)
                         {
@@ -190,10 +181,10 @@ namespace GenericBot
 
                         var guilddb = new DBGuild(user.Guild.Id);
                         var guildconfig = GenericBot.GuildConfigs[user.Guild.Id];
-                        guilddb.GetUser(user.Id)
+                        var bannedUser = guilddb.GetOrCreateUser(user.Id)
                             .AddWarning(
                                 $"Banned for `Username Contains Discord Spam Invite` (By `{GenericBot.DiscordClient.CurrentUser}` At `{DateTime.UtcNow.ToString(@"yyyy-MM-dd HH:mm tt")} GMT`)");
-                        guilddb.Save();
+                        guilddb.AddOrUpdateUser(bannedUser);
 
                         if (guildconfig.UserLogChannelId != 0)
                         {

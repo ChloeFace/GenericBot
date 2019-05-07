@@ -70,18 +70,17 @@ namespace GenericBot.CommandModules
                 {
                     if (!db.Users.Any(u => u.ID.Equals(user.Id)))
                     {
-                        db.Users.Add(new DBUser(user));
+                        db.AddOrUpdateUser(new DBUser(user));
                         newUsers++;
                     }
                     else
                     {
-                        db.GetUser(user.Id).AddUsername(user.Username);
-                        db.GetUser(user.Id).AddNickname(user);
+                        db.AddOrUpdateUser(db.GetOrCreateUser(user.Id).AddUsername(user.Username));
+                        db.AddOrUpdateUser(db.GetOrCreateUser(user.Id).AddNickname(user));
                         updatedUsers++;
                     }
                 }
 
-                db.Save();
                 await msg.ReplyAsync($"`{newUsers}` users added to database, `{updatedUsers}` updated");
             };
 
@@ -146,44 +145,6 @@ namespace GenericBot.CommandModules
             };
 
             TestCommands.Add(DBStats);
-
-            Command addwarning = new Command("oldwarning");
-            addwarning.Description += "Add a warning to the database without meta info";
-            addwarning.Usage = "oldwarning <user> <warning>";
-            addwarning.RequiredPermission = Command.PermissionLevels.Admin;
-            ulong uid;
-            addwarning.ToExecute += async (client, msg, parameters) =>
-            {
-                if (parameters.Empty())
-                {
-                    await msg.ReplyAsync("You must specify a user");
-                    return;
-                }
-
-                if (ulong.TryParse(parameters[0].TrimStart('<', '@', '!').TrimEnd('>'), out uid))
-                {
-                    parameters.RemoveAt(0);
-                    string warning = parameters.reJoin();
-                    var guildDb = new DBGuild(msg.GetGuild().Id);
-                    if (guildDb.Users.Any(u => u.ID.Equals(uid))) // if already exists
-                    {
-                        guildDb.Users.Find(u => u.ID.Equals(uid)).AddWarning(warning);
-                    }
-                    else
-                    {
-                        guildDb.Users.Add(new DBUser { ID = uid, Warnings = new List<string> { warning } });
-                    }
-                    guildDb.Save();
-                    await msg.ReplyAsync($"Added `{warning.Replace('`', '\'')}` to <@{uid}> (`{uid}`)");
-                }
-                else
-                {
-                    await msg.ReplyAsync("Could not find that user");
-                }
-
-            };
-
-            TestCommands.Add(addwarning);
 
             Command archivePins = new Command("archivePins");
             archivePins.RequiredPermission = Command.PermissionLevels.GlobalAdmin;
@@ -333,19 +294,17 @@ namespace GenericBot.CommandModules
                 {
                     Process proc = new System.Diagnostics.Process();
                     proc.StartInfo.FileName = "/bin/bash";
-                    proc.StartInfo.Arguments = "-c \"" + parameters.reJoin() + " > results\"";
+                    proc.StartInfo.Arguments = "-c \"" + parameters.reJoin() + " ";
                     proc.StartInfo.RedirectStandardOutput = true;
+                    proc.StartInfo.RedirectStandardError = true;
                     proc.StartInfo.CreateNoWindow = true;
                     proc.StartInfo.UseShellExecute = false;
 
                     proc.Start();
                     proc.WaitForExit();
 
-                    Console.WriteLine(proc.StandardOutput.ReadToEnd());
-                    foreach (string str in File.ReadAllText("results").SplitSafe('\n'))
-                    {
-                        await msg.ReplyAsync($"```\n{str}\n```");
-                    }
+                    string output = proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd();
+                    await msg.ReplyAsync($"```\n{output}\n```");
                 }
                 else
                 {
@@ -353,48 +312,6 @@ namespace GenericBot.CommandModules
                 }
             };
             TestCommands.Add(cmdp);
-
-            Command decryptDb = new Command("decryptDb");
-            decryptDb.RequiredPermission = Command.PermissionLevels.GlobalAdmin;
-            decryptDb.ToExecute += async (client, msg, parameters) =>
-            {
-                File.WriteAllText($"files/guildDbs/{parameters[0]}_raw.json", AES.DecryptText(File.ReadAllText($"files/guildDbs/{parameters[0]}.json"), GenericBot.GlobalConfiguration.DatabasePassword));
-                var res = msg.Channel.SendFileAsync($"files/guildDbs/{parameters[0]}_raw.json", "Self-destructing in 15 seconds!").Result;
-                await Task.Delay(TimeSpan.FromSeconds(15));
-                try { await res.DeleteAsync(); }
-                catch { }
-            };
-
-            TestCommands.Add(decryptDb);
-
-            Command repairDb = new Command("repairDb");
-            repairDb.RequiredPermission = Command.PermissionLevels.GlobalAdmin;
-            repairDb.ToExecute += async (client, msg, paramList) =>
-            {
-                lock (msg.GetGuild().Id.ToString())
-                {
-                    var db = new DBGuild(msg.GetGuild().Id);
-
-
-                    foreach (var user in db.Users)
-                    {
-                        if (!user.Nicknames.Empty())
-                        {
-                            user.Nicknames = user.Nicknames.Where(n => !string.IsNullOrEmpty(n)).ToList();
-                        }
-
-                        if (!user.Usernames.Empty())
-                        {
-                            user.Usernames = user.Usernames.Where(n => !string.IsNullOrEmpty(n)).ToList();
-                        }
-
-                    }
-                    db.Save();
-                }
-                await msg.ReplyAsync($"Done!");
-            };
-
-            TestCommands.Add(repairDb);
 
             return TestCommands;
         }
